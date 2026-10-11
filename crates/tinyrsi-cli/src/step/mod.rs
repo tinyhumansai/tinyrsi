@@ -87,6 +87,10 @@ fn environment(ctx: &StepContext, step: &StepRun, out: &Path, tmp: &Path) -> Vec
     ]);
     if let Some(base) = &ctx.model_url {
         env.push((
+            "RSI_GATEWAY".to_owned(),
+            base.trim_end_matches('/').to_owned(),
+        ));
+        env.push((
             "RSI_MODEL_URL".to_owned(),
             format!(
                 "{}/__tag/{}/{}/v1",

@@ -32,7 +32,8 @@ loops/graph-coloring/
 
 A `dir` subject is copied for each candidate; your folder is never touched and
 the best version ends up in the run folder (`incumbent/`). For code in a git
-repository use `"kind": "git"` with an absolute `path` and a `branch`: every
+repository use `"kind": "git"` with a `path` (absolute, or relative to the
+loop folder and free to leave it with `..`) and a `branch`: every
 candidate is a branch and worktree, and promotion fast-forwards `branch`.
 `editable` and `frozen` are path prefixes; anything outside them fails the
 candidate before it is scored.
@@ -49,7 +50,10 @@ A score function is any command. It runs in the loop folder with
   "failures": [ { "id": "q3", "type": "temporal", "text": "what went wrong" } ] }
 ```
 
-`failures` are shown to the hive in the next brief. Pick how a candidate wins:
+`failures` are shown to the hive in the next brief. A score function that
+calls models itself (a reader, a judge, an embedder) should send them through
+the run's gateway so they count against the budget: `$RSI_GATEWAY/__tag/<phase>/<name>/v1`
+is an OpenAI-compatible base URL that needs no key. Pick how a candidate wins:
 
 - per-seed scores, compared with a paired test — `"test": "seeds"`, with
   `"seeds": [1, 2, 3]` (each seed reaches the scorer as `$RSI_SEED`);

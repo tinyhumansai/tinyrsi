@@ -295,8 +295,10 @@ fn validate_fields(m: &Manifest) -> Result<()> {
 fn validate_subject(s: &SubjectSpec) -> Result<()> {
     match s.kind {
         SubjectKind::Dir => plain(&s.path)?,
+        // A repository usually lives outside the loop folder, so its path may
+        // be absolute or climb out with `..`; it is only ever read through git.
         SubjectKind::Git => {
-            if s.path.is_empty() || s.path.split('/').any(|part| part == "..") {
+            if s.path.trim().is_empty() {
                 return Err(Error::Path {
                     path: s.path.clone(),
                 });

@@ -39,7 +39,7 @@ fn passes_the_contract_environment() {
     let dir = tempfile::tempdir().unwrap();
     let cmd = script(
         dir.path(),
-        "echo \"$RSI_CANDIDATE|$RSI_INCUMBENT|$RSI_EPOCH|$RSI_LABEL|$RSI_SEED|$EXTRA|$RSI_MODEL_URL\"\n\
+        "echo \"$RSI_CANDIDATE|$RSI_INCUMBENT|$RSI_EPOCH|$RSI_LABEL|$RSI_SEED|$EXTRA|$RSI_MODEL_URL|$RSI_GATEWAY\"\n\
          test -d \"$RSI_OUT\" && test -d \"$TMPDIR\"\n",
     );
     let run = step(dir.path(), &cmd);
@@ -48,7 +48,9 @@ fn passes_the_contract_environment() {
     let root = dir.path().display();
     assert_eq!(
         outcome.stdout.trim(),
-        format!("{root}/cand|{root}/inc|2|c1|7|yes|http://127.0.0.1:9/__tag/step/score.x/v1")
+        format!(
+            "{root}/cand|{root}/inc|2|c1|7|yes|http://127.0.0.1:9/__tag/step/score.x/v1|http://127.0.0.1:9"
+        )
     );
     assert!(dir.path().join("steps/x/stdout").exists());
 }

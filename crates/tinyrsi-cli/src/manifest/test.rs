@@ -133,9 +133,14 @@ fn rejects_unsafe_paths() {
     }
     let files = with(|m| {
         m["subject"] =
-            json!({ "kind": "git", "path": "../up", "branch": "main", "editable": ["src/"] });
+            json!({ "kind": "git", "path": " ", "branch": "main", "editable": ["src/"] });
     });
     assert!(matches!(parse(&files), Err(Error::Path { .. })));
+    // A repository may sit outside the loop folder.
+    let files = with(|m| {
+        m["subject"] = json!({ "kind": "git", "path": "../../vendor/repo", "branch": "main", "editable": ["src/"] });
+    });
+    assert!(parse(&files).is_ok());
 }
 
 #[test]

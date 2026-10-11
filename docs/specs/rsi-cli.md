@@ -82,8 +82,9 @@ Unknown fields fail. `$schema` and `version` must match exactly.
 | `env` | no | Extra environment for every step. |
 
 **`subject`.** `kind` is `dir` or `git`. `path` is the subject directory,
-relative to the loop folder (or absolute for `git`, which usually points at a
-checkout elsewhere). `editable` lists path prefixes the hive may change;
+relative to the loop folder. A `dir` path must stay inside the loop folder; a
+`git` path may be absolute or leave it with `..`, since the repository usually
+lives elsewhere. `editable` lists path prefixes the hive may change;
 `frozen` lists prefixes it must not, and wins over `editable`. A `git` subject
 also names the `branch` that holds the incumbent; promotion fast-forwards it.
 `require_test_change` (default `false`) rejects candidates that touch no file
@@ -154,6 +155,7 @@ process-group kill. Environment: `PATH`, `HOME`, `TMPDIR`, the `env` map, and
 | `RSI_LABEL` | `incumbent` or the candidate id. |
 | `RSI_SEED` | Seed for this invocation. |
 | `RSI_MODEL_URL` | OpenAI-compatible base URL through the gateway, tagged with the step id. |
+| `RSI_GATEWAY` | The gateway's untagged base; a step tags its own calls as `$RSI_GATEWAY/__tag/<phase>/<seat>/v1`. |
 
 `result.json`:
 
