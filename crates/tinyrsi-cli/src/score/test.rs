@@ -300,13 +300,8 @@ fn pins_the_scorecard_stored_form() {
 }
 
 /// Score `dir` as the incumbent with one `run` scorer `m` running `script`
-/// under `parallel`, returning the scorecard and the wall-clock time taken.
-/// The timing is only for the timeout test's sanity bound.
-fn score_script(
-    dir: &Path,
-    script: &str,
-    parallel: u32,
-) -> (Result<Scorecard>, std::time::Duration) {
+/// under `parallel`.
+fn score_script(dir: &Path, script: &str, parallel: u32) -> Result<Scorecard> {
     std::fs::write(dir.join("m.sh"), script).unwrap();
     let mut spec = seeds_spec(
         MetricDirection::Minimize,
@@ -317,8 +312,7 @@ fn score_script(
         label: "incumbent".into(),
         path: dir.to_path_buf(),
     };
-    let start = std::time::Instant::now();
-    let card = score_checkout(
+    score_checkout(
         &ctx(dir),
         &spec,
         &checkout,
@@ -326,8 +320,7 @@ fn score_script(
         &Judges::new(),
         &BTreeMap::new(),
         None,
-    );
-    (card, start.elapsed())
+    )
 }
 
 /// A scorer that waits until `$BARRIER` seeds have started (failing after
@@ -364,7 +357,7 @@ fn peaks(card: &Scorecard) -> Vec<(u64, Option<f64>)> {
 #[test]
 fn seeds_run_one_at_a_time_by_default() {
     let dir = tempfile::tempdir().unwrap();
-    let (card, _) = score_script(dir.path(), &barrier(1), 1);
+    let card = score_script(dir.path(), &barrier(1), 1);
     let card = card.unwrap();
     assert_eq!(
         peaks(&card),
@@ -376,7 +369,7 @@ fn seeds_run_one_at_a_time_by_default() {
 #[test]
 fn parallel_seeds_run_concurrently() {
     let dir = tempfile::tempdir().unwrap();
-    let (card, _) = score_script(dir.path(), &barrier(3), 3);
+    let card = score_script(dir.path(), &barrier(3), 3);
     let card = card.unwrap();
     assert!(
         card.runs["m"].iter().all(|r| r.ok),
@@ -392,11 +385,13 @@ fn parallel_seeds_run_concurrently() {
 #[test]
 fn parallel_limit_caps_concurrent_seeds() {
     let dir = tempfile::tempdir().unwrap();
-    let (card, _) = score_script(dir.path(), &barrier(2), 2);
+    let card = score_script(dir.path(), &barrier(2), 2);
     let card = card.unwrap();
     assert!(card.runs["m"].iter().all(|r| r.ok), "two seeds overlapped");
     assert!(
-        peaks(&card).iter().all(|(_, p)| p.is_some_and(|p| p <= 2.0)),
+        peaks(&card)
+            .iter()
+            .all(|(_, p)| p.is_some_and(|p| p <= 2.0)),
         "never more than two running: {:?}",
         peaks(&card)
     );
@@ -408,8 +403,8 @@ fn parallel_seeds_keep_seed_order_and_report_failures_like_sequential_runs() {
     // from seed order.
     let script = "case $RSI_SEED in\n  1) sleep 1 ;;\n  2) echo broken >&2; exit 3 ;;\nesac\necho \"METRIC m=$RSI_SEED\"\n";
     let dir = tempfile::tempdir().unwrap();
-    let (sequential, _) = score_script(dir.path(), script, 1);
-    let (parallel, _) = score_script(dir.path(), script, 3);
+    let sequential = score_script(dir.path(), script, 1);
+    let parallel = score_script(dir.path(), script, 3);
     let strip = |card: Scorecard| -> Vec<(u64, bool, Option<String>, Option<f64>)> {
         card.runs["m"]
             .iter()
