@@ -301,6 +301,7 @@ fn pins_the_scorecard_stored_form() {
 
 /// Score `dir` as the incumbent with one `run` scorer `m` running `script`
 /// under `parallel`, returning the scorecard and the wall-clock time taken.
+/// The timing is only for the timeout test's sanity bound.
 fn score_script(
     dir: &Path,
     script: &str,
@@ -329,42 +330,75 @@ fn score_script(
     (card, start.elapsed())
 }
 
-/// Every seed sleeps one second, then reports its seed as the metric.
-const SLEEPY: &str = "sleep 1\necho \"METRIC m=$RSI_SEED\"\n";
+/// A scorer that waits until `$BARRIER` seeds have started (failing after
+/// ten seconds), then reports how many seeds were running at that moment.
+///
+/// Seeds that overlap pass the barrier; seeds run one at a time can only pass
+/// a barrier of 1. The reported peak bounds how many ran at once, so neither
+/// check depends on how fast the machine is.
+fn barrier(seeds: u32) -> String {
+    format!(
+        "mkdir -p started running\n\
+         touch started/$RSI_SEED running/$RSI_SEED\n\
+         i=0\n\
+         while [ $(( $(ls started | wc -l) )) -lt {seeds} ]; do\n\
+         \x20 i=$((i + 1))\n\
+         \x20 if [ $i -gt 200 ]; then rm running/$RSI_SEED; echo barrier >&2; exit 1; fi\n\
+         \x20 sleep 0.05\n\
+         done\n\
+         peak=$(( $(ls running | wc -l) ))\n\
+         sleep 0.2\n\
+         rm running/$RSI_SEED\n\
+         echo \"METRIC m=$peak\"\n"
+    )
+}
+
+/// The peak each seed reported, in result order, or `None` for a failed seed.
+fn peaks(card: &Scorecard) -> Vec<(u64, Option<f64>)> {
+    card.runs["m"]
+        .iter()
+        .map(|r| (r.seed, r.result.as_ref().map(|x| x.score)))
+        .collect()
+}
 
 #[test]
 fn seeds_run_one_at_a_time_by_default() {
     let dir = tempfile::tempdir().unwrap();
-    let (card, took) = score_script(dir.path(), SLEEPY, 1);
+    let (card, _) = score_script(dir.path(), &barrier(1), 1);
     let card = card.unwrap();
-    assert!(took >= std::time::Duration::from_secs(3), "took {took:?}");
-    let seeds: Vec<u64> = card.runs["m"].iter().map(|r| r.seed).collect();
-    assert_eq!(seeds, vec![1, 2, 3]);
-    assert_eq!(card.headline, Some(2.0));
+    assert_eq!(
+        peaks(&card),
+        vec![(1, Some(1.0)), (2, Some(1.0)), (3, Some(1.0))],
+        "never more than one seed running"
+    );
 }
 
 #[test]
 fn parallel_seeds_run_concurrently() {
     let dir = tempfile::tempdir().unwrap();
-    let (card, took) = score_script(dir.path(), SLEEPY, 3);
+    let (card, _) = score_script(dir.path(), &barrier(3), 3);
     let card = card.unwrap();
     assert!(
-        took < std::time::Duration::from_millis(2500),
-        "took {took:?}"
+        card.runs["m"].iter().all(|r| r.ok),
+        "all three seeds met at the barrier: {:?}",
+        card.runs["m"]
     );
-    assert!(card.runs["m"].iter().all(|r| r.ok));
-    assert_eq!(card.headline, Some(2.0));
+    assert_eq!(
+        peaks(&card).iter().map(|(s, _)| *s).collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
 }
 
 #[test]
 fn parallel_limit_caps_concurrent_seeds() {
     let dir = tempfile::tempdir().unwrap();
-    let (card, took) = score_script(dir.path(), SLEEPY, 2);
-    assert!(card.unwrap().runs["m"].iter().all(|r| r.ok));
-    assert!(took >= std::time::Duration::from_secs(2), "took {took:?}");
+    let (card, _) = score_script(dir.path(), &barrier(2), 2);
+    let card = card.unwrap();
+    assert!(card.runs["m"].iter().all(|r| r.ok), "two seeds overlapped");
     assert!(
-        took < std::time::Duration::from_millis(2900),
-        "took {took:?}"
+        peaks(&card).iter().all(|(_, p)| p.is_some_and(|p| p <= 2.0)),
+        "never more than two running: {:?}",
+        peaks(&card)
     );
 }
 

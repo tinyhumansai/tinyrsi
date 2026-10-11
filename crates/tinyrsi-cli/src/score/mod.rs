@@ -18,10 +18,7 @@
 use std::{
     collections::BTreeMap,
     path::Path,
-    sync::{
-        Mutex, PoisonError,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    },
+    sync::{Mutex, PoisonError},
     thread,
     time::Duration,
 };
@@ -139,19 +136,27 @@ fn run_seeds(
             .map(|&seed| run_seed(ctx, &run(seed)))
             .collect();
     }
-    let next = AtomicUsize::new(0);
-    let failed = AtomicBool::new(false);
+    // The next seed index and whether a command failed to start. One lock
+    // covers both, so no seed is claimed after a failure is recorded.
+    let claims = Mutex::new((0_usize, false));
+    let claim = || {
+        let mut state = claims.lock().unwrap_or_else(PoisonError::into_inner);
+        let (next, failed) = &mut *state;
+        if *failed || *next >= seeds.len() {
+            return None;
+        }
+        *next += 1;
+        Some(*next - 1)
+    };
     let slots: Vec<Mutex<Option<Result<SeedScore>>>> =
         seeds.iter().map(|_| Mutex::new(None)).collect();
     thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
-                while !failed.load(Ordering::SeqCst) {
-                    let i = next.fetch_add(1, Ordering::SeqCst);
-                    let Some(&seed) = seeds.get(i) else { break };
-                    let result = run_seed(ctx, &run(seed));
+                while let Some(i) = claim() {
+                    let result = run_seed(ctx, &run(seeds[i]));
                     if result.is_err() {
-                        failed.store(true, Ordering::SeqCst);
+                        claims.lock().unwrap_or_else(PoisonError::into_inner).1 = true;
                     }
                     *slots[i].lock().unwrap_or_else(PoisonError::into_inner) = Some(result);
                 }
